@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="ru">
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>3D объемная буква К с проекциями</title>
+  <style>
+    .canvas-container {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    canvas {
+      border: 1px solid black;
+    }
+    .controls {
+      margin: 10px;
+    }
+    .matrix {
+      font-family: monospace;
+      margin: 10px;
+    }
+    .projection-label {
+      text-align: center;
+      font-weight: bold;
+      margin: 5px;
+    }
+  </style>
+</head>
+<body>
+<div class="canvas-container">
+  <div>
+    <div class="projection-label">3D вид</div>
+    <canvas id="main-canvas" width="400" height="400"></canvas>
+  </div>
+  <div>
+    <div class="projection-label">Проекция Oxy</div>
+    <canvas id="oxy-canvas" width="300" height="300"></canvas>
+  </div>
+  <div>
+    <div class="projection-label">Проекция Oxz</div>
+    <canvas id="oxz-canvas" width="300" height="300"></canvas>
+  </div>
+  <div>
+    <div class="projection-label">Проекция Oyz</div>
+    <canvas id="oyz-canvas" width="300" height="300"></canvas>
+  </div>
+</div>
+<div class="controls">
+  <button onclick="rotateX()">Поворот по X</button>
+  <button onclick="rotateY()">Поворот по Y</button>
+  <button onclick="rotateZ()">Поворот по Z</button>
+  <button onclick="scale()">Масштабирование</button>
+  <button onclick="reset()">Сброс</button>
+  <br><br>
+  <div>
+    Произвольная ось вращения:
+    <input type="number" id="axisX" value="1" style="width:50px"> X
+    <input type="number" id="axisY" value="1" style="width:50px"> Y
+    <input type="number" id="axisZ" value="1" style="width:50px"> Z
+    <button onclick="rotateArbitraryAxis()">Вращать</button>
+  </div>
+</div>
+<div id="matrix" class="matrix"></div>
+
+<script>
+  const mainCanvas = document.getElementById('main-canvas');
+  const oxyCanvas = document.getElementById('oxy-canvas');
+  const oxzCanvas = document.getElementById('oxz-canvas');
+  const oyzCanvas = document.getElementById('oyz-canvas');
+
+  const mainCtx = mainCanvas.getContext('2d');
+  const oxyCtx = oxyCanvas.getContext('2d');
+  const oxzCtx = oxzCanvas.getContext('2d');
+  const oyzCtx = oyzCanvas.getContext('2d');
+
+  const matrixDiv = document.getElementById('matrix');
+
+  // Координаты вершин объемной буквы К
+  let vertices = [
+    // Передняя грань
+    [-25, -50, 10],  // 0
+    [-25, 50, 10],   // 1
+    [-15, -50, 10],  // 2
+    [-15, 50, 10],   // 3
+    [-15, 0, 10],    // 4
+    [25, -50, 10],   // 5
+    [35, -50, 10],   // 6
+    [-15, 10, 10],   // 7
+    [25, 50, 10],    // 8
+    [35, 50, 10],    // 9
+
+    // Задняя грань
+    [-25, -50, -10], // 10
+    [-25, 50, -10],  // 11
+    [-15, -50, -10], // 12
+    [-15, 50, -10],  // 13
+    [-15, 0, -10],   // 14
+    [25, -50, -10],  // 15
+    [35, -50, -10],  // 16
+    [-15, 10, -10],  // 17
+    [25, 50, -10],   // 18
+    [35, 50, -10]    // 19
+  ];
+
+  const edges = [
+    // Передняя грань
+    [0, 1], [2, 3], [0, 2], [1, 3],
+    [4, 5], [4, 6], [5, 6],
+    [7, 8], [7, 9], [8, 9],
+
+    // Задняя грань
+    [10, 11], [12, 13], [10, 12], [11, 13],
+    [14, 15], [14, 16], [15, 16],
+    [17, 18], [17, 19], [18, 19],
+
+    // Соединительные ребра
+    [0, 10], [1, 11], [2, 12], [3, 13],
+    [4, 14], [5, 15], [6, 16],
+    [7, 17], [8, 18], [9, 19]
+  ];
+
+  let transformMatrix = [
+    [1, 0, 0, 0],
+    [0, 1, 0, 0],
+    [0, 0, 1, 0],
+    [0, 0, 0, 1]
+  ];
+
+  function multiplyMatrixAndPoint(matrix, point) {
+    const result = [0, 0, 0, 1];
+    for (let i = 0; i < 4; i++) {
+      result[i] = matrix[i][0] * point[0] +
+              matrix[i][1] * point[1] +
+              matrix[i][2] * point[2] +
+              matrix[i][3];
+    }
+    return [result[0]/result[3], result[1]/result[3], result[2]/result[3]];
+  }
+
+  function multiplyMatrices(a, b) {
+    const result = Array(4).fill().map(() => Array(4).fill(0));
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        for (let k = 0; k < 4; k++) {
+          result[i][j] += a[i][k] * b[k][j];
+        }
+      }
+    }
+    return result;
+  }
+
+  function project3D(point) {
+    const scale = 2;
+    const x = point[0] * scale + mainCanvas.width/2;
+    const y = point[1] * scale + mainCanvas.height/2;
+    return [x, y];
+  }
+
+  function projectOxy(point) {
+    const scale = 2;
+    return [
+      point[0] * scale + oxyCanvas.width/2,
+      point[1] * scale + oxyCanvas.height/2
+    ];
+  }
+
+  function projectOxz(point) {
+    const scale = 2;
+    return [
+      point[0] * scale + oxzCanvas.width/2,
+      point[2] * scale + oxzCanvas.height/2
+    ];
+  }
+
+  function projectOyz(point) {
+    const scale = 2;
+    return [
+      point[1] * scale + oyzCanvas.width/2,
+      point[2] * scale + oyzCanvas.height/2
+    ];
+  }
+
+  function drawProjection(ctx, vertices, edges, projectionFunc) {
+    ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+
+    // Рисуем оси
+    ctx.beginPath();
+    ctx.strokeStyle = '#ddd';
+    ctx.moveTo(ctx.canvas.width/2, 0);
+    ctx.lineTo(ctx.canvas.width/2, ctx.canvas.height);
+    ctx.moveTo(0, ctx.canvas.height/2);
+    ctx.lineTo(ctx.canvas.width, ctx.canvas.height/2);
+    ctx.stroke();
+
+    // Рисуем объект
+    ctx.beginPath();
+    ctx.strokeStyle = 'blue';
+    ctx.lineWidth = 2;
+    edges.forEach(edge => {
+      const p1 = multiplyMatrixAndPoint(transformMatrix, vertices[edge[0]]);
+      const p2 = multiplyMatrixAndPoint(transformMatrix, vertices[edge[1]]);
+
+      const [x1, y1] = projectionFunc(p1);
+      const [x2, y2] = projectionFunc(p2);
+
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+    });
+    ctx.stroke();
+  }
+
+  function drawObject() {
+    drawProjection(mainCtx, vertices, edges, project3D);
+
+    // Ортографические проекции
+    drawProjection(oxyCtx, vertices, edges, projectOxy);
+    drawProjection(oxzCtx, vertices, edges, projectOxz);
+    drawProjection(oyzCtx, vertices, edges, projectOyz);
+
+    // Показываем матрицу преобразования
+    let matrixText = "Матрица преобразования:<br>";
+    transformMatrix.forEach(row => {
+      matrixText += row.map(x => x.toFixed(2)).join(' ') + '<br>';
+    });
+    matrixDiv.innerHTML = matrixText;
+  }
+
+  function rotateArbitraryAxis() {
+    const x = parseFloat(document.getElementById('axisX').value);
+    const y = parseFloat(document.getElementById('axisY').value);
+    const z = parseFloat(document.getElementById('axisZ').value);
+
+    // Нормализация вектора оси
+    const length = Math.sqrt(x*x + y*y + z*z);
+    const ux = x/length;
+    const uy = y/length;
+    const uz = z/length;
+
+    const angle = Math.PI / 12; // 15 градусов
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    const t = 1 - c;
+
+    const rotation = [
+      [t*ux*ux + c,    t*ux*uy - s*uz, t*ux*uz + s*uy, 0],
+      [t*ux*uy + s*uz, t*uy*uy + c,    t*uy*uz - s*ux, 0],
+      [t*ux*uz - s*uy, t*uy*uz + s*ux, t*uz*uz + c,    0],
+      [0,              0,              0,               1]
+    ];
+
+    transformMatrix = multiplyMatrices(rotation, transformMatrix);
+    drawObject();
+  }
+
+  function rotateX() {
+    const angle = Math.PI / 12;
+    const rotation = [
+      [1, 0, 0, 0],
+      [0, Math.cos(angle), -Math.sin(angle), 0],
+      [0, Math.sin(angle), Math.cos(angle), 0],
+      [0, 0, 0, 1]
+    ];
+    transformMatrix = multiplyMatrices(rotation, transformMatrix);
+    drawObject();
+  }
+
+  function rotateY() {
+    const angle = Math.PI / 12;
+    const rotation = [
+      [Math.cos(angle), 0, Math.sin(angle), 0],
+      [0, 1, 0, 0],
+      [-Math.sin(angle), 0, Math.cos(angle), 0],
+      [0, 0, 0, 1]
+    ];
+    transformMatrix = multiplyMatrices(rotation, transformMatrix);
+    drawObject();
+  }
+
+  function rotateZ() {
+    const angle = Math.PI / 12;
+    const rotation = [
+      [Math.cos(angle), -Math.sin(angle), 0, 0],
+      [Math.sin(angle), Math.cos(angle), 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1]
+    ];
+    transformMatrix = multiplyMatrices(rotation, transformMatrix);
+    drawObject();
+  }
+
+  function scale() {
+    const s = 1.2;
+    const scaling = [
+      [s, 0, 0, 0],
+      [0, s, 0, 0],
+      [0, 0, s, 0],
+      [0, 0, 0, 1]
+    ];
+    transformMatrix = multiplyMatrices(scaling, transformMatrix);
+    drawObject();
+  }
+
+  function translate() {
+    const translation = [
+      [1, 0, 0, 10],
+      [0, 1, 0, 10],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1]
+    ];
+    transformMatrix = multiplyMatrices(translation, transformMatrix);
+    drawObject();
+  }
+
+  function reset() {
+    transformMatrix = [
+      [1, 0, 0, 0],
+      [0, 1, 0, 0],
+      [0, 0, 1, 0],
+      [0, 0, 0, 1]
+    ];
+    drawObject();
+  }
+
+  // Начальный поворот для лучшей видимости объема
+  const initialRotation = [
+    [Math.cos(Math.PI/8), 0, Math.sin(Math.PI/8), 0],
+    [0, 1, 0, 0],
+    [-Math.sin(Math.PI/8), 0, Math.cos(Math.PI/8), 0],
+    [0, 0, 0, 1]
+  ];
+  transformMatrix = multiplyMatrices(initialRotation, transformMatrix);
+
+  // Инициализация
+  drawObject();
+</script>
+</body>
+</html>

@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Алгоритмы отсечения</title>
+  <style>
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    canvas {
+      border: 1px solid #000;
+      margin: 10px;
+      cursor: crosshair;
+    }
+    .controls {
+      margin: 10px;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+    }
+    button {
+      padding: 5px 10px;
+      margin: 0 5px;
+    }
+    .active {
+      background-color: #4CAF50;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+<h2>Алгоритмы отсечения</h2>
+<div class="controls">
+  <button onclick="switchAlgorithm('cohen')" id="cohenBtn">Сазерленд-Коэн</button>
+  <button onclick="switchAlgorithm('cyrus')" id="cyrusBtn">Кирус-Бек</button>
+  <button id="lineMode" class="active" onclick="setMode('line')">Рисовать отрезки</button>
+  <button id="clipMode" onclick="setMode('clip')">Рисовать границу</button>
+  <button onclick="clearCanvas()">Очистить</button>
+</div>
+<canvas id="canvas" width="600" height="400"></canvas>
+
+<script>
+  const canvas = document.getElementById('canvas');
+  const ctx = canvas.getContext('2d');
+  let currentMode = 'line';
+  let currentAlgorithm = 'cohen';
+  let lastPoint = null;
+  let lines = [];
+  let clipPolygon = [];
+  let tempPolygon = [];
+  let isDrawingPolygon = false;
+
+  function switchAlgorithm(algorithm) {
+    currentAlgorithm = algorithm;
+    document.getElementById('cohenBtn').classList.toggle('active', algorithm === 'cohen');
+    document.getElementById('cyrusBtn').classList.toggle('active', algorithm === 'cyrus');
+    drawScene();
+  }
+
+  function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('lineMode').classList.toggle('active', mode === 'line');
+    document.getElementById('clipMode').classList.toggle('active', mode === 'clip');
+    lastPoint = null;
+  }
+
+  function clearCanvas() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    lines = [];
+    clipPolygon = [];
+    tempPolygon = [];
+    lastPoint = null;
+    isDrawingPolygon = false;
+    drawScene();
+  }
+
+  function drawBoundingBox() {
+    if (clipPolygon.length === 0) return;
+
+    const xmin = Math.min(...clipPolygon.map(p => p.x));
+    const xmax = Math.max(...clipPolygon.map(p => p.x));
+    const ymin = Math.min(...clipPolygon.map(p => p.y));
+    const ymax = Math.max(...clipPolygon.map(p => p.y));
+
+    ctx.strokeStyle = 'rgba(0, 0, 255, 0.5)';
+    ctx.setLineDash([5, 5]);
+    ctx.strokeRect(xmin, ymin, xmax - xmin, ymax - ymin);
+    ctx.setLineDash([]);
+  }
+
+  function cyrusBeck(x1, y1, x2, y2, polygon) {
+    if (polygon.length < 3) return null;
+
+    let t0 = 0;
+    let t1 = 1;
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+
+    for (let i = 0; i < polygon.length; i++) {
+      const next = (i + 1) % polygon.length;
+
+      const nx = -(polygon[next].y - polygon[i].y);
+      const ny = polygon[next].x - polygon[i].x;
+
+      const numerator = nx * (polygon[i].x - x1) + ny * (polygon[i].y - y1);
+      const denominator = nx * dx + ny * dy;
+
+      if (denominator === 0) {
+        if (numerator < 0) return null;
+        continue;
+      }
+
+      const t = numerator / denominator;
+
+      if (denominator > 0) {
+        t0 = Math.max(t0, t);
+      } else {
+        t1 = Math.min(t1, t);
+      }
+
+      if (t0 > t1) return null;
+    }
+
+    return {
+      x1: x1 + t0 * dx,
+      y1: y1 + t0 * dy,
+      x2: x1 + t1 * dx,
+      y2: y1 + t1 * dy
+    };
+  }
+
+  function cohenSutherland(x1, y1, x2, y2, xmin, ymin, xmax, ymax) {
+    const INSIDE = 0;
+    const LEFT = 1;
+    const RIGHT = 2;
+    const BOTTOM = 4;
+    const TOP = 8;
+
+    function computeCode(x, y) {
+      let code = INSIDE;
+      if (x < xmin) code |= LEFT;
+      else if (x > xmax) code |= RIGHT;
+      if (y < ymin) code |= BOTTOM;
+      else if (y > ymax) code |= TOP;
+      return code;
+    }
+
+    let code1 = computeCode(x1, y1);
+    let code2 = computeCode(x2, y2);
+    let accept = false;
+
+    while (true) {
+      if (!(code1 | code2)) {
+        accept = true;
+        break;
+      } else if (code1 & code2) {
+        break;
+      } else {
+        let x, y;
+        const code = code1 ? code1 : code2;
+
+        if (code & TOP) {
+          x = x1 + (x2 - x1) * (ymax - y1) / (y2 - y1);
+          y = ymax;
+        } else if (code & BOTTOM) {
+          x = x1 + (x2 - x1) * (ymin - y1) / (y2 - y1);
+          y = ymin;
+        } else if (code & RIGHT) {
+          y = y1 + (y2 - y1) * (xmax - x1) / (x2 - x1);
+          x = xmax;
+        } else if (code & LEFT) {
+          y = y1 + (y2 - y1) * (xmin - x1) / (x2 - x1);
+          x = xmin;
+        }
+
+        if (code === code1) {
+          x1 = x;
+          y1 = y;
+          code1 = computeCode(x1, y1);
+        } else {
+          x2 = x;
+          y2 = y;
+          code2 = computeCode(x2, y2);
+        }
+      }
+    }
+
+    return accept ? {x1, y1, x2, y2} : null;
+  }
+
+  function drawScene() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Рисуем многоугольник
+    if (clipPolygon.length > 0) {
+      ctx.strokeStyle = 'blue';
+      ctx.beginPath();
+      ctx.moveTo(clipPolygon[0].x, clipPolygon[0].y);
+      for (let i = 1; i < clipPolygon.length; i++) {
+        ctx.lineTo(clipPolygon[i].x, clipPolygon[i].y);
+      }
+      ctx.closePath();
+      ctx.stroke();
+
+      // Показываем ограничивающий прямоугольник для алгоритма Сазерленда-Коэна
+      if (currentAlgorithm === 'cohen') {
+        drawBoundingBox();
+      }
+    }
+
+    // Рисуем временный многоугольник
+    if (tempPolygon.length > 0) {
+      ctx.strokeStyle = 'gray';
+      ctx.beginPath();
+      ctx.moveTo(tempPolygon[0].x, tempPolygon[0].y);
+      for (let i = 1; i < tempPolygon.length; i++) {
+        ctx.lineTo(tempPolygon[i].x, tempPolygon[i].y);
+      }
+      if (lastPoint) {
+        ctx.lineTo(lastPoint.x, lastPoint.y);
+      }
+      ctx.stroke();
+    }
+
+    // Рисуем отрезки
+    lines.forEach(line => {
+      // Исходный отрезок
+      ctx.strokeStyle = 'rgba(255, 0, 0, 0.3)';
+      ctx.beginPath();
+      ctx.moveTo(line.x1, line.y1);
+      ctx.lineTo(line.x2, line.y2);
+      ctx.stroke();
+
+      if (clipPolygon.length > 2) {
+        let clipped;
+        if (currentAlgorithm === 'cyrus') {
+          clipped = cyrusBeck(line.x1, line.y1, line.x2, line.y2, clipPolygon);
+        } else {
+          const xmin = Math.min(...clipPolygon.map(p => p.x));
+          const xmax = Math.max(...clipPolygon.map(p => p.x));
+          const ymin = Math.min(...clipPolygon.map(p => p.y));
+          const ymax = Math.max(...clipPolygon.map(p => p.y));
+          clipped = cohenSutherland(line.x1, line.y1, line.x2, line.y2, xmin, ymin, xmax, ymax);
+        }
+
+        if (clipped) {
+          ctx.strokeStyle = 'green';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(clipped.x1, clipped.y1);
+          ctx.lineTo(clipped.x2, clipped.y2);
+          ctx.stroke();
+          ctx.lineWidth = 1;
+        }
+      }
+    });
+
+    // Текущая точка
+    if (lastPoint) {
+      ctx.fillStyle = 'red';
+      ctx.beginPath();
+      ctx.arc(lastPoint.x, lastPoint.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  canvas.addEventListener('click', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    if (currentMode === 'line') {
+      if (lastPoint) {
+        lines.push({
+          x1: lastPoint.x,
+          y1: lastPoint.y,
+          x2: x,
+          y2: y
+        });
+        lastPoint = null;
+      } else {
+        lastPoint = { x, y };
+      }
+    } else if (currentMode === 'clip') {
+      if (!isDrawingPolygon) {
+        tempPolygon = [];
+        isDrawingPolygon = true;
+      }
+
+      tempPolygon.push({ x, y });
+
+      if (tempPolygon.length > 2) {
+        const startPoint = tempPolygon[0];
+        const distance = Math.sqrt(
+                Math.pow(x - startPoint.x, 2) +
+                Math.pow(y - startPoint.y, 2)
+        );
+
+        if (distance < 20) {
+          tempPolygon.pop();
+          clipPolygon = [...tempPolygon];
+          tempPolygon = [];
+          isDrawingPolygon = false;
+          lastPoint = null;
+        }
+      }
+
+      lastPoint = { x, y };
+    }
+    drawScene();
+  });
+
+  // Инициализация
+  switchAlgorithm('cohen');
+  drawScene();
+</script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Обработка изображений</h1>
+<form action="/process" method="post" enctype="multipart/form-data">
+    <div class="mb-3">
+        <label for="image" class="form-label">Загрузите изображение:</label>
+        <input type="file" class="form-control" id="image" name="image" required>
+    </div>
+    <div class="mb-3">
+        <label for="method" class="form-label">Выберите метод обработки:</label>
+        <select class="form-select" id="method" name="method">
+            <option value="histogram_rgb">Эквализация гистограммы (RGB)</option>
+            <option value="histogram_hsv">Эквализация гистограммы (HSV)</option>
+            <option value="contrast">Линейное контрастирование</option>
+            <option value="gaussian_blur">Гауссово размытие</option>
+            <option value="average_blur">Среднее размытие</option>
+            <option value="median_blur">Медианное размытие</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label for="kernel_size" class="form-label">Размер ядра (нечетное число, только для размытия):</label>
+        <input type="number" class="form-control" id="kernel_size" name="kernel_size" value="5">
+    </div>
+    <button type="submit" class="btn btn-primary">Обработать</button>
+</form>
+{% endblock %}
