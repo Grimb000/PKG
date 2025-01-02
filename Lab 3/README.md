@@ -74,8 +74,7 @@
 ### 5. Основные алгоритмы
 
 #### 5.1 Эквализация гистограммы (RGB)
-```python
-def equalize_hist_rgb(image):
+    def equalize_hist_rgb(image):
     channels = cv2.split(image)
     eq_channels = [cv2.equalizeHist(ch) for ch in channels]
     return cv2.merge(eq_channels)
@@ -88,7 +87,8 @@ def equalize_hist_rgb(image):
 #### 5.3 Гауссово размытие
     def gaussian_blur(image, kernel_size=5):
     return cv2.GaussianBlur(image, (kernel_size, kernel_size), 0)
-    ### 6. Взаимодействие сервер-клиент
+    
+### 6. Взаимодействие сервер-клиент
 
 #### 6.1 Формат данных
 
