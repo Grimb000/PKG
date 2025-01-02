@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Info Extractor</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        h1 { color: #333; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { padding: 10px; border: 1px solid #ddd; text-align: left; }
+        th { background-color: #f2f2f2; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>Image Info Extractor</h1>
+    <form id="uploadForm">
+        <label for="folder">Select Folder:</label>
+        <input type="file" id="folder" name="folder" webkitdirectory multiple required>
+        <button type="submit">Submit</button>
+    </form>
+
+    <table id="infoTable">
+        <thead>
+            <tr>
+                <th>Filename</th>
+                <th>Dimensions (px)</th>
+                <th>Resolution (dpi)</th>
+                <th>Color Depth</th>
+                <th>Compression</th>
+            </tr>
+        </thead>
+        <tbody></tbody>
+    </table>
+
+    <script>
+        document.getElementById('uploadForm').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const files = document.getElementById('folder').files;
+            const formData = new FormData();
+
+            for (let i = 0; i < files.length; i++) {
+                formData.append('files', files[i]);
+            }
+
+            fetch('/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.querySelector('#infoTable tbody');
+                tbody.innerHTML = '';
+                data.forEach(info => {
+                    const row = `<tr>
+                        <td>${info.filename}</td>
+                        <td>${info.dimensions[0]} x ${info.dimensions[1]}</td>
+                        <td>${info.resolution}</td>
+                        <td>${info.color_depth || 'N/A'}</td>
+                        <td>${info.compression}</td>
+                    </tr>`;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+            })
+            .catch(error => console.error('Error:', error));
+        });
+    </script>
+</body>
+</html>
