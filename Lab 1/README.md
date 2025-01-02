@@ -25,7 +25,6 @@
 ### 3.1 Конвертация цветовых моделей
 
 #### CMYK -> RGB
-```javascript
 function cmykToRgb(c, m, y, k) { ... }
 
 Конвертирует значения CMYK в RGB.
